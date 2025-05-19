@@ -1,7 +1,8 @@
 <script lang="ts">
   import svelteLogo from './assets/svelte.svg'
   import viteLogo from '/vite.svg'
-  
+  import Card from './lib/Card.svelte'
+
   const doubleSided = true;
   const notched = false;
   const showCardName = false;
@@ -19,7 +20,7 @@
   
   const cardSetId = "OP-01"
 
-  const cards = Array.from({ length: 122 }, (_, i) => ({ setId: cardSetId, id: String(i + 1).padStart(3, '0') }));
+  const cards = Array.from({ length: 122 }, (_, i) => ({ width: widthMM, height: heightMM, setId: cardSetId, id: String(i + 1).padStart(3, '0') }));
 
 
   const cardsPerRow = Math.floor(pageWidthMM / widthMM);
@@ -34,7 +35,7 @@
     return chunks;
   }
 
-  $: frontPages = chunkCards(cards, cardsPerPage);
+  $: frontPages = chunkCards(cards, cardsPerPage - 1);
   $: backPages = doubleSided
     ? frontPages.map(page => [...page].reverse()) // mirror back
     : [];
@@ -48,18 +49,7 @@
         style={`grid-template-columns: repeat(auto-fit, ${widthMM}mm);`}
       >
         {#each page as card}
-          <div
-            class="bg-white shadow-md"
-            style={`width: ${widthMM}mm; height: ${heightMM}mm;`}
-          >
-            <div
-              class="outline-text flex place-content-between"
-              style={`line-height: ${titleHeightMM - 1}mm;width: ${titleWidthMM}mm; height: ${titleHeightMM}mm;`}
-            >
-              <div>{card.setId}</div>
-              <div>{card.id}</div>
-            </div>
-          </div>
+          <Card card={card} titleHeightMM={titleHeightMM} titleWidthMM={titleWidthMM} />
         {/each}
       </div>
     {/each}
@@ -70,18 +60,7 @@
           style={`grid-template-columns: repeat(auto-fit, ${widthMM}mm);`}
         >
           {#each page as card}
-            <div
-              class="bg-white shadow-md"
-              style={`width: ${widthMM}mm; height: ${heightMM}mm;`}
-            >
-              <div
-                class="outline-text flex place-content-between"
-                style={`line-height: ${titleHeightMM - 1}mm;width: ${titleWidthMM}mm; height: ${titleHeightMM}mm;`}
-              >
-                <div>{card.setId}</div>
-                <div>{card.id}</div>
-              </div>
-            </div>
+            <Card card={card} titleHeightMM={titleHeightMM} titleWidthMM={titleWidthMM} />
           {/each}
         </div>
       {/each}
