@@ -1,0 +1,1 @@
+docker build -t my-arch-dev-env -f dev.environment.Dockerfile .
