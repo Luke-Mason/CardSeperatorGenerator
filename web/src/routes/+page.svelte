@@ -1,33 +1,34 @@
 <script lang="ts">
-  import svelteLogo from './assets/svelte.svg'
-  import viteLogo from '/vite.svg'
-  import Card from './lib/Card.svelte'
+  import Card from '../lib/Card.svelte'
 
-  const doubleSided = true;
-  const notched = false;
-  const showCardName = false;
-  const showSetId = true;
-  const showCardId = true;
-  
+  // const doubleSided = false;
+  // const notched = false;
+  // const showCardName = false;
+  // const showSetId = true;
+  // const showCardId = true;
   const titleWidthMM = 25;
   const titleHeightMM = 5;
-
-  const widthMM = 65;
-  const heightMM = 95;
-
+  const cardWidthMM = 65;
+  const cardHeightMM = 95;
   const pageWidthMM = 210;
   const pageHeightMM = 297;
-  
+
   const cardSetId = "OP-01"
+  type CardDetails = {
+    width: number,
+    height: number,
+    setId: string,
+    id: string
+  }
 
-  const cards = Array.from({ length: 122 }, (_, i) => ({ width: widthMM, height: heightMM, setId: cardSetId, id: String(i + 1).padStart(3, '0') }));
+  const cards = Array.from({ length: 122 }, (_, i): CardDetails => ({ width: cardWidthMM, height: cardHeightMM, setId: cardSetId, id: String(i + 1).padStart(3, '0') }));
 
 
-  const cardsPerRow = Math.floor(pageWidthMM / widthMM);
-  const rowsPerPage = Math.floor(pageHeightMM / heightMM);
+  const cardsPerRow = Math.floor(pageWidthMM / cardWidthMM);
+  const rowsPerPage = Math.floor(pageHeightMM / cardHeightMM);
   const cardsPerPage = cardsPerRow * rowsPerPage;
 
-  function chunkCards(array, size) {
+  function chunkCards(array: CardDetails[], size: number) {
     const chunks = [];
     for (let i = 0; i < array.length; i += size) {
       chunks.push(array.slice(i, i + size));
@@ -36,9 +37,9 @@
   }
 
   $: frontPages = chunkCards(cards, cardsPerPage - 1);
-  $: backPages = doubleSided
-    ? frontPages.map(page => [...page].reverse()) // mirror back
-    : [];
+  // $: backPages = doubleSided
+  //   ? frontPages.map(page => [...page].reverse()) // mirror back
+  //   : [];
 </script>
 
 <main>
@@ -46,28 +47,28 @@
     {#each frontPages as page, i}
       <div
         class="grid gap-0 justify-start break-after-page print:gap-0 print:justify-start"
-        style={`grid-template-columns: repeat(auto-fit, ${widthMM}mm);`}
+        style={`grid-template-columns: repeat(auto-fit, ${cardWidthMM}mm);`}
       >
         {#each page as card}
           <Card card={card} titleHeightMM={titleHeightMM} titleWidthMM={titleWidthMM} />
         {/each}
       </div>
     {/each}
-    {#if doubleSided}
+    <!-- {#if doubleSided}
       {#each backPages as page, i}
         <div
           class="grid gap-0 justify-start break-after-page print:gap-0 print:justify-start"
-          style={`grid-template-columns: repeat(auto-fit, ${widthMM}mm);`}
+          style={`grid-template-columns: repeat(auto-fit, ${cardWidthMM}mm);`}
         >
           {#each page as card}
             <Card card={card} titleHeightMM={titleHeightMM} titleWidthMM={titleWidthMM} />
           {/each}
         </div>
       {/each}
-    {/if}
+    {/if} -->
   </div>
 </main>
- 
+
 <style>
   .outline-text {
     color: white;
