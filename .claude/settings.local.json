@@ -9,7 +9,9 @@
       "Bash(chmod:*)",
       "Bash(node --version:*)",
       "Bash(go version:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(go mod tidy:*)",
+      "Bash(go build:*)"
     ]
   }
 }

@@ -1,6 +1,29 @@
 version: '3.8'
 
 services:
+  # MinIO Object Storage
+  minio:
+    image: minio/minio:latest
+    container_name: card-separator-minio
+    ports:
+      - "9000:9000"      # API
+      - "9001:9001"      # Console
+    volumes:
+      - minio_data:/data
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - card-separator-network
+
   backend:
     build:
       context: ./backend
@@ -8,10 +31,23 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ./backend/cache:/root/cache
+      - ./backend/cache:/root/cache         # Legacy (can be removed after migration)
+      - ./backend/data:/root/data           # SQLite database
       - ./backend/src:/app/src
     environment:
       - PORT=8080
+      - DATABASE_PATH=/root/data/cards.db
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - MINIO_BUCKET=card-images
+      - MINIO_USE_SSL=false
+      - MINIO_REGION=us-east-1
+      - AUTO_SYNC_ON_STARTUP=true
+      - SET_SYNC_INTERVAL_HOURS=24
+      - CACHE_MAX_AGE_HOURS=168
+    depends_on:
+      - minio
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/api/health"]
@@ -19,6 +55,8 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    networks:
+      - card-separator-network
 
   frontend:
     build:
@@ -35,7 +73,13 @@ services:
       - backend
     restart: unless-stopped
     command: npm run dev -- --host 0.0.0.0
+    networks:
+      - card-separator-network
 
 networks:
-  default:
-    name: card-separator-network
+  card-separator-network:
+    driver: bridge
+
+volumes:
+  minio_data:
+    driver: local
