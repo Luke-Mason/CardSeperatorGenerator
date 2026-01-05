@@ -1,1 +1,32 @@
+# Dependencies
 node_modules/
+web/node_modules/
+backend/cache/
+
+# Build outputs
+dist/
+build/
+*.log
+
+# Environment
+.env.local
+.env.production
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Go
+backend/server
+*.exe
+*.exe~
+
+# Cache
+cache/
+*.cache

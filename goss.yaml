@@ -1,0 +1,72 @@
+# goss.yaml
+port:
+  tcp:22: # SSH port
+    listening: true
+    ip:
+    - 0.0.0.0
+    - '::'
+
+user:
+  devuser:
+    exists: true
+    uid: 1000 # Or whatever it ends up being, can auto-generate with `goss add user devuser`
+    gid: 1000 # Or `goss add user devuser`
+    groups:
+    - wheel
+    home: /home/devuser
+    shell: /bin/bash
+
+package:
+  openssh:
+    installed: true
+  go:
+    installed: true
+  git:
+    installed: true
+  sudo:
+    installed: true
+
+process:
+  sshd:
+    running: true
+
+command:
+  # Check NVM for devuser
+  "sudo -u devuser bash -ic 'command -v nvm'":
+    exit-status: 0
+    stdout:
+    - !contains /home/devuser/.nvm/nvm.sh
+  # Check Node for devuser
+  "sudo -u devuser bash -ic 'node --version'":
+    exit-status: 0
+    stdout:
+    - !contains "v" # Just check it outputs something like a version
+  # Check Go version
+  "go version":
+    exit-status: 0
+    stdout:
+    - !contains "go version"
+  # Check devuser can sudo
+  "sudo -u devuser sudo whoami":
+    exit-status: 0
+    stdout:
+    - "root"
+  # Check GOPATH for devuser
+  "sudo -u devuser bash -ic 'echo $GOPATH'":
+    exit-status: 0
+    stdout:
+    - "/home/devuser/go"
+  # Check /workspace exists
+  "test -d /workspace":
+    exit-status: 0
+
+file:
+  /home/devuser/.bashrc:
+    exists: true
+    owner: devuser
+    contains:
+    - "export NVM_DIR"
+    - "export GOPATH"
+  /workspace:
+    exists: true
+    filetype: directory

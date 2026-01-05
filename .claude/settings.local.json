@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:optcgapi.com)",
+      "WebFetch(domain:docs.apitcg.com)",
+      "WebFetch(domain:www.apitcg.com)",
+      "Bash(npm run dev:*)",
+      "Bash(chmod:*)",
+      "Bash(node --version:*)",
+      "Bash(go version:*)",
+      "Bash(curl:*)"
+    ]
+  }
+}

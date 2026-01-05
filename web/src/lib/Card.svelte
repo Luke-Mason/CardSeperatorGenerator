@@ -1,5 +1,5 @@
 <script>
-  let { card, titleHeightMM, titleWidthMM } = $props();
+  let { card, titleHeightMM, titleWidthMM, showImage = true, imageUrl = '', showCutLines = false } = $props();
 
   // Define some dynamic sizes based on titleHeightMM for responsiveness within the banner
   // These are multipliers, adjust them to your liking
@@ -26,62 +26,94 @@
 
 </script>
 <div
-  class="bg-white outline flex"
+  class="bg-white outline flex flex-col relative"
   style={`width: ${card.width}mm; height: ${card.height}mm;`}
 >
-<div
-  class="card-title-wrapper"
-  style={`
-    width: 50mm;
-    height: ${titleHeightMM}mm;
-  `}
->
-  <!-- Cost Circle -->
+  <!-- Cut Lines (Print only) -->
+  {#if showCutLines}
+    <div class="cut-lines print:block hidden">
+      <!-- Horizontal top -->
+      <div class="cut-line-h" style="top: 0; left: 0; right: 0;"></div>
+      <!-- Horizontal bottom -->
+      <div class="cut-line-h" style="bottom: 0; left: 0; right: 0;"></div>
+      <!-- Vertical left -->
+      <div class="cut-line-v" style="left: 0; top: 0; bottom: 0;"></div>
+      <!-- Vertical right -->
+      <div class="cut-line-v" style="right: 0; top: 0; bottom: 0;"></div>
+
+      <!-- Corner crop marks -->
+      <div class="crop-mark crop-mark-tl" style="top: -2mm; left: -2mm;"></div>
+      <div class="crop-mark crop-mark-tr" style="top: -2mm; right: -2mm;"></div>
+      <div class="crop-mark crop-mark-bl" style="bottom: -2mm; left: -2mm;"></div>
+      <div class="crop-mark crop-mark-br" style="bottom: -2mm; right: -2mm;"></div>
+    </div>
+  {/if}
+  <!-- Title/Header Section -->
   <div
-    class="cost-display"
+    class="card-title-wrapper"
     style={`
-      width: ${costCircleDiameter}mm;
-      height: ${costCircleDiameter}mm;
-      background-color: #B91C1C; /* Slightly darker red (Tailwind red-700) */
-      box-shadow: 0 0 0 ${costCircleBorder}mm white; /* White outline */
+      width: 100%;
+      height: ${titleHeightMM}mm;
     `}
   >
-    {card.cost}
+    <!-- Cost Circle (only show if card has a cost) -->
+    {#if card.cost}
+      <div
+        class="cost-display"
+        style={`
+          width: ${costCircleDiameter}mm;
+          height: ${costCircleDiameter}mm;
+          background-color: #B91C1C; /* Slightly darker red (Tailwind red-700) */
+          box-shadow: 0 0 0 ${costCircleBorder}mm white; /* White outline */
+          font-size: ${costCircleDiameter * 0.5}mm;
+        `}
+      >
+        {card.cost}
+      </div>
+    {/if}
+
+    <!-- Main Title Banner -->
+    <div
+      class="title-banner"
+      style={`
+        clip-path: ${clipPathPoints};
+        background-color: #DC2626; /* Red (Tailwind red-600) */
+        padding-left: ${bannerPaddingLeft}mm;
+        padding-right: ${bannerPaddingRight}mm;
+      `}
+    >
+      <div
+        class="name"
+        style={`
+          -webkit-text-stroke: ${nameTextStroke}px black;
+          font-size: ${titleHeightMM * 0.35}mm;
+        `}
+      >
+        {card.name || card.id}
+      </div>
+      <div
+        class="set-id"
+        style={`
+          -webkit-text-stroke: ${setIdTextStroke}px black;
+          font-size: ${titleHeightMM * 0.3}mm;
+        `}
+      >
+        {card.cardSetId || card.setId}
+      </div>
+    </div>
   </div>
 
-  <!-- Main Tite Banner -->
-  <div
-    class="title-banner"
-    style={`
-      clip-path: ${clipPathPoints};
-      background-color: #DC2626; /* Red (Tailwind red-600) */
-      padding-left: ${bannerPaddingLeft}mm;
-      padding-right: ${bannerPaddingRight}mm;
-    `}
-  >
-    <div
-      class="name"
-      style={`
-        -webkit-text-stroke: ${nameTextStroke}mm black;
-        // text-shadow: ${nameTextStroke}mm ${nameTextStroke}mm 0 black, -${nameTextStroke}mm -${nameTextStroke}mm 0 black, ${nameTextStroke}mm -${nameTextStroke}mm 0 black, -${nameTextStroke}mm ${nameTextStroke}mm 0 black;
-      `}
-    >
-      {card.name}
+  <!-- Card Image Section -->
+  {#if showImage && imageUrl}
+    <div class="flex-1 flex items-center justify-center overflow-hidden">
+      <img
+        src={imageUrl}
+        alt={card.name || card.id}
+        class="max-w-full max-h-full object-contain"
+        loading="lazy"
+      />
     </div>
-    <div
-      class="set-id"
-      style={`
-        -webkit-text-stroke: ${setIdTextStroke}mm black;
-        // text-shadow: ${setIdTextStroke}mm ${setIdTextStroke}mm 0 black, -${setIdTextStroke}mm -${setIdTextStroke}mm 0 black, ${setIdTextStroke}mm -${setIdTextStroke}mm 0 black, -${setIdTextStroke}mm ${setIdTextStroke}mm 0 black;
-      `}
-    >
-      {card.setId}
-    </div>
-  </div>
-  <div>
-    {card.id}
-  </div>
-</div>
+  {/if}
 </div>
 <style>
   .card-title-wrapper {
@@ -131,4 +163,48 @@
     white-space: nowrap; /* Prevent wrapping */
     paint-order: stroke fill;
   }
+
+  /* Cut lines and crop marks */
+  .cut-lines {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  .cut-line-h {
+    position: absolute;
+    height: 0.5px;
+    border-top: 1px dashed #999;
+  }
+
+  .cut-line-v {
+    position: absolute;
+    width: 0.5px;
+    border-left: 1px dashed #999;
+  }
+
+  .crop-mark {
+    position: absolute;
+    width: 2mm;
+    height: 2mm;
+  }
+
+  .crop-mark::before,
+  .crop-mark::after {
+    content: '';
+    position: absolute;
+    background: #333;
+  }
+
+  .crop-mark-tl::before { top: 0; left: 0; width: 100%; height: 0.5px; }
+  .crop-mark-tl::after { top: 0; left: 0; width: 0.5px; height: 100%; }
+
+  .crop-mark-tr::before { top: 0; right: 0; width: 100%; height: 0.5px; }
+  .crop-mark-tr::after { top: 0; right: 0; width: 0.5px; height: 100%; }
+
+  .crop-mark-bl::before { bottom: 0; left: 0; width: 100%; height: 0.5px; }
+  .crop-mark-bl::after { bottom: 0; left: 0; width: 0.5px; height: 100%; }
+
+  .crop-mark-br::before { bottom: 0; right: 0; width: 100%; height: 0.5px; }
+  .crop-mark-br::after { bottom: 0; right: 0; width: 0.5px; height: 100%; }
 </style>
