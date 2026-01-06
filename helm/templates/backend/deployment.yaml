@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "card-separator.fullname" . }}-backend
+  labels:
+    app: backend
+    {{- include "card-separator.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.backend.autoscaling.enabled }}
+  replicas: {{ .Values.backend.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      app: backend
+      {{- include "card-separator.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        app: backend
+        {{- include "card-separator.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "card-separator.serviceAccountName" . }}
+      containers:
+      - name: backend
+        image: "{{ .Values.image.backend.repository }}:{{ .Values.image.backend.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        env:
+        - name: PORT
+          value: "8080"
+        - name: DATABASE_PATH
+          value: {{ .Values.backend.env.DATABASE_PATH }}
+        - name: MINIO_ENDPOINT
+          value: {{ .Values.backend.env.MINIO_ENDPOINT }}
+        - name: MINIO_ACCESS_KEY
+          value: {{ .Values.backend.env.MINIO_ACCESS_KEY }}
+        - name: MINIO_SECRET_KEY
+          value: {{ .Values.backend.env.MINIO_SECRET_KEY }}
+        - name: MINIO_BUCKET
+          value: {{ .Values.backend.env.MINIO_BUCKET }}
+        - name: MINIO_USE_SSL
+          value: "{{ .Values.backend.env.MINIO_USE_SSL }}"
+        - name: MINIO_REGION
+          value: {{ .Values.backend.env.MINIO_REGION }}
+        - name: AUTO_SYNC_ON_STARTUP
+          value: "{{ .Values.backend.env.AUTO_SYNC_ON_STARTUP }}"
+        - name: SET_SYNC_INTERVAL_HOURS
+          value: "{{ .Values.backend.env.SET_SYNC_INTERVAL_HOURS }}"
+        - name: CACHE_MAX_AGE_HOURS
+          value: "{{ .Values.backend.env.CACHE_MAX_AGE_HOURS }}"
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        resources:
+          {{- toYaml .Values.backend.resources | nindent 10 }}
+        volumeMounts:
+        - name: data
+          mountPath: /data
+      volumes:
+      - name: data
+        {{- if .Values.backend.persistence.enabled }}
+        persistentVolumeClaim:
+          claimName: {{ include "card-separator.fullname" . }}-backend-data
+        {{- else }}
+        emptyDir: {}
+        {{- end }}

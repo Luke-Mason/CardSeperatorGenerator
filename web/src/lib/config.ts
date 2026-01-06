@@ -67,7 +67,12 @@ export const DEFAULT_CONFIG: AppConfig = {
 // Local storage helpers
 const CONFIG_KEY = 'card-separator-config';
 
+// Check if we're in a browser environment
+const isBrowser = typeof window !== 'undefined' && typeof localStorage !== 'undefined';
+
 export function saveConfig(config: Partial<AppConfig>): void {
+	if (!isBrowser) return;
+
 	try {
 		const existing = loadConfig();
 		const merged = { ...existing, ...config };
@@ -78,6 +83,8 @@ export function saveConfig(config: Partial<AppConfig>): void {
 }
 
 export function loadConfig(): AppConfig {
+	if (!isBrowser) return DEFAULT_CONFIG;
+
 	try {
 		const stored = localStorage.getItem(CONFIG_KEY);
 		if (stored) {
@@ -90,6 +97,8 @@ export function loadConfig(): AppConfig {
 }
 
 export function resetConfig(): void {
+	if (!isBrowser) return;
+
 	try {
 		localStorage.removeItem(CONFIG_KEY);
 	} catch (e) {

@@ -11,7 +11,31 @@
       "Bash(go version:*)",
       "Bash(curl:*)",
       "Bash(go mod tidy:*)",
-      "Bash(go build:*)"
+      "Bash(go build:*)",
+      "Bash(docker-compose ps:*)",
+      "Bash(bash:*)",
+      "Bash(helm lint:*)",
+      "Bash(claude:*)",
+      "Bash(echo:*)",
+      "Bash(powershell:*)",
+      "Bash(npm view:*)",
+      "Bash(npx bmad-method@6.0.0-alpha.22 install)",
+      "Bash(npx bmad-method@latest install)",
+      "Bash(npm install)",
+      "Bash(kubectl version:*)",
+      "Bash(minikube version:*)",
+      "Bash(skaffold version:*)",
+      "Bash(ls:*)",
+      "Bash(where:*)",
+      "Bash(choco install:*)",
+      "Bash(docker info:*)",
+      "Bash(docker version:*)",
+      "Bash(wsl --update:*)",
+      "Bash(go get:*)",
+      "Bash(go list:*)",
+      "Bash(npm run test:unit:*)",
+      "Bash(npm run check:*)",
+      "Bash(npm run build:*)"
     ]
   }
 }

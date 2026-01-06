@@ -1,0 +1,42 @@
+{{- if .Values.minio.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "card-separator.fullname" . }}-minio
+  labels:
+    app: minio
+    {{- include "card-separator.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.minio.service.type }}
+  ports:
+    - port: {{ .Values.minio.service.port }}
+      targetPort: api
+      protocol: TCP
+      name: api
+    - port: {{ .Values.minio.service.consolePort }}
+      targetPort: console
+      protocol: TCP
+      name: console
+  selector:
+    app: minio
+    {{- include "card-separator.selectorLabels" . | nindent 4 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "card-separator.fullname" . }}-minio-headless
+  labels:
+    app: minio
+    {{- include "card-separator.labels" . | nindent 4 }}
+spec:
+  clusterIP: None
+  ports:
+    - port: {{ .Values.minio.service.port }}
+      targetPort: api
+      protocol: TCP
+      name: api
+  selector:
+    app: minio
+    {{- include "card-separator.selectorLabels" . | nindent 4 }}
+{{- end }}

@@ -1,0 +1,13 @@
+apiVersion: v2
+name: card-separator
+description: A Helm chart for Card Separator application
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - card-separator
+  - one-piece-tcg
+  - trading-cards
+maintainers:
+  - name: Card Separator Team
+    email: dev@cardseparator.com

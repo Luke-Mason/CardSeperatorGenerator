@@ -13,11 +13,15 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/joho/godotenv"
 	"github.com/rs/cors"
 )
 
 func main() {
 	log.Println("🚀 Starting Card Separator Backend...")
+
+	// Load .env file if it exists (optional, will use environment variables or defaults)
+	_ = godotenv.Load()
 
 	// Load configuration
 	cfg := config.Load()

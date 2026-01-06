@@ -1,0 +1,122 @@
+apiVersion: skaffold/v4beta6
+kind: Config
+metadata:
+  name: card-separator
+
+build:
+  artifacts:
+    - image: card-separator/backend
+      context: backend
+      docker:
+        dockerfile: Dockerfile
+      sync:
+        manual:
+          - src: "**/*.go"
+            dest: /app
+    - image: card-separator/frontend
+      context: web
+      docker:
+        dockerfile: Dockerfile
+      sync:
+        manual:
+          - src: "src/**/*"
+            dest: /app/src
+
+deploy:
+  helm:
+    releases:
+      - name: card-separator
+        chartPath: helm
+        valuesFiles:
+          - helm/values.yaml
+        setValues:
+          image.backend.tag: "{{.IMAGE_TAG}}"
+          image.frontend.tag: "{{.IMAGE_TAG}}"
+
+# Development profile (local Minikube)
+profiles:
+  - name: dev
+    activation:
+      - command: dev
+    build:
+      local:
+        push: false
+    deploy:
+      helm:
+        releases:
+          - name: card-separator
+            chartPath: helm
+            valuesFiles:
+              - helm/values.yaml
+            setValueTemplates:
+              image.backend.repository: "card-separator/backend"
+              image.backend.tag: "latest"
+              image.frontend.repository: "card-separator/frontend"
+              image.frontend.tag: "latest"
+              backend.replicaCount: "1"
+              frontend.replicaCount: "1"
+              minio.replicas: "1"
+              backend.autoscaling.enabled: "false"
+              ingress.hosts[0].host: "cardseparator.local"
+    portForward:
+      - resourceType: service
+        resourceName: card-separator-frontend
+        port: 5173
+        localPort: 5173
+      - resourceType: service
+        resourceName: card-separator-backend
+        port: 8080
+        localPort: 8080
+      - resourceType: service
+        resourceName: card-separator-minio
+        port: 9001
+        localPort: 9001
+
+  # Staging profile
+  - name: staging
+    build:
+      cluster:
+        pullSecretName: registry-secret
+      tagPolicy:
+        gitCommit: {}
+    deploy:
+      helm:
+        releases:
+          - name: card-separator
+            chartPath: helm
+            valuesFiles:
+              - helm/values.yaml
+            setValueTemplates:
+              image.backend.repository: "gcr.io/my-project/card-separator-backend"
+              image.frontend.repository: "gcr.io/my-project/card-separator-frontend"
+              backend.replicaCount: "2"
+              frontend.replicaCount: "2"
+              minio.replicas: "1"
+              ingress.hosts[0].host: "staging.cardseparator.com"
+
+  # Production profile
+  - name: prod
+    build:
+      cluster:
+        pullSecretName: registry-secret
+      tagPolicy:
+        gitCommit: {}
+    deploy:
+      helm:
+        releases:
+          - name: card-separator
+            chartPath: helm
+            valuesFiles:
+              - helm/values.yaml
+            setValueTemplates:
+              image.backend.repository: "gcr.io/my-project/card-separator-backend"
+              image.frontend.repository: "gcr.io/my-project/card-separator-frontend"
+              backend.replicaCount: "5"
+              backend.autoscaling.enabled: "true"
+              backend.autoscaling.minReplicas: "5"
+              backend.autoscaling.maxReplicas: "20"
+              frontend.replicaCount: "3"
+              minio.mode: "distributed"
+              minio.replicas: "3"
+              ingress.hosts[0].host: "cardseparator.com"
+              ingress.tls[0].secretName: "card-separator-tls-prod"

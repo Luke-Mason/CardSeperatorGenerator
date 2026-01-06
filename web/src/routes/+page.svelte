@@ -1,593 +1,555 @@
 <script lang="ts">
-  import Card from '../lib/Card.svelte'
-  import ConfigPanel from '../lib/ConfigPanel.svelte';
-  import Presets from '../lib/Presets.svelte';
-  import { onMount } from 'svelte';
-  import { getImageUrl, type ImageSize } from '../lib/api';
-  import { loadConfig, saveConfig, type AppConfig } from '../lib/config';
+	import Sidebar from '../lib/Sidebar.svelte';
+	import CardEditor from '../lib/CardEditor.svelte';
+	import { onMount } from 'svelte';
+	import { getImageUrl, type ImageSize } from '../lib/api';
+	import { loadConfig, saveConfig, type AppConfig } from '../lib/config';
+	import type { Card } from '../lib/types';
+	import { generateSeparatorPairs, generatePrintPages } from '../lib/separatorLogic';
 
-  // Configuration
-  let config = $state<AppConfig>(loadConfig());
-  let showConfigPanel = $state(false);
-  let showPresetsPanel = $state(false);
-  let doubleSided = $state(config.doubleSided);
-  let flipEdge: 'long' | 'short' = $state(config.flipEdge);
-  let showImages = $state(config.showImages);
-  let imageQuality: ImageSize = $state(config.imageQuality);
-  let showCutLines = $state(config.showCutLines);
-  let setId = $state(config.setId);
+	// Configuration
+	let config = $state<AppConfig>(loadConfig());
 
-  // Filter/Sort
-  let filterColor = $state('');
-  let filterType = $state('');
-  let sortBy: 'id' | 'name' | 'cost' | 'power' = $state('id');
+	// Sidebar state
+	let tabConfig = $state({
+		fontSize: 12,
+		fontFamily: 'Impact, sans-serif',
+		offsetX: 0,
+		offsetY: 0,
+		content: '{name}',
+		textColor: '#FFFFFF',
+		strokeWidth: 0.6,
+		strokeColor: '#000000'
+	});
 
-  // Page dimensions
-  const titleWidthMM = 25;
-  let titleHeightMM = $derived(config.cardDimensions.tabHeight);
-  let cardWidthMM = $derived(config.cardDimensions.width);
-  let cardHeightMM = $derived(config.cardDimensions.height);
-  let pageWidthMM = $derived(config.pageDimensions.width);
-  let pageHeightMM = $derived(config.pageDimensions.height);
+	let visualConfig = $state({
+		borderColor: '#000000',
+		borderWidth: 1,
+		imageCenterSize: 80,
+		imageFilter: 'none'
+	});
 
-  // API Card type
-  type APICard = {
-    card_name: string;
-    card_set_id: string;
-    card_cost: string;
-    card_power: string;
-    card_color: string;
-    card_type: string;
-    rarity: string;
-    attribute: string;
-    card_text: string;
-    card_image: string;
-    set_id: string;
-    set_name: string;
-    life: string;
-    counter_amount: number;
-  };
+	let showCutLines = $state(config.showCutLines);
+	let doubleSided = $state(config.doubleSided);
+	let flipEdge: 'long' | 'short' = $state(config.flipEdge);
+	let setId = $state(config.setId);
+	let imageQuality: ImageSize = $state(config.imageQuality);
 
-  // Internal card type for rendering
-  type CardDetails = {
-    width: number;
-    height: number;
-    setId: string;
-    cardSetId: string;
-    id: string;
-    name: string;
-    cost: string;
-    image: string;
-    rawData?: APICard;
-  };
+	// API Card type
+	type APICard = {
+		card_name: string;
+		card_set_id: string;
+		card_cost: string;
+		card_power: string;
+		card_color: string;
+		card_type: string;
+		rarity: string;
+		attribute: string;
+		card_text: string;
+		card_image: string;
+		set_id: string;
+		set_name: string;
+		life: string;
+		counter_amount: number;
+	};
 
-  let allCards: CardDetails[] = $state([]);
-  let loading = $state(false);
-  let error = $state('');
-  let loadingProgress = $state(0);
+	// Internal card type for rendering
+	type CardDetails = {
+		width: number;
+		height: number;
+		setId: string;
+		cardSetId: string;
+		id: string;
+		name: string;
+		cost: string;
+		image: string;
+		rawData?: APICard;
+	};
 
-  // Filtered and sorted cards
-  let cards = $derived.by(() => {
-    let filtered = allCards;
+	let allCards: CardDetails[] = $state([]);
+	let loading = $state(false);
+	let error = $state('');
+	let currentCardIndex = $state(0);
+	let previewMode: 'single' | 'print' = $state('single');
 
-    // Apply filters
-    if (filterColor) {
-      filtered = filtered.filter(c => c.rawData?.card_color?.toLowerCase().includes(filterColor.toLowerCase()));
-    }
-    if (filterType) {
-      filtered = filtered.filter(c => c.rawData?.card_type?.toLowerCase().includes(filterType.toLowerCase()));
-    }
+	// Get current card for preview
+	let currentCard = $derived.by((): Card | undefined => {
+		if (allCards.length === 0) return undefined;
+		const card = allCards[currentCardIndex];
+		return {
+			id: card.id,
+			setId: card.setId,
+			name: card.name,
+			cost: parseInt(card.cost) || 0,
+			type: card.rawData?.card_type || '',
+			rarity: card.rawData?.rarity || '',
+			images: {
+				thumbnail: getImageUrl(card.image, 'thumbnail'),
+				medium: getImageUrl(card.image, 'medium'),
+				full: getImageUrl(card.image, 'full'),
+				original: card.image
+			}
+		};
+	});
 
-    // Apply sorting
-    const sorted = [...filtered].sort((a, b) => {
-      switch (sortBy) {
-        case 'name':
-          return a.name.localeCompare(b.name);
-        case 'cost': {
-          const costA = parseInt(a.cost) || 999;
-          const costB = parseInt(b.cost) || 999;
-          return costA - costB;
-        }
-        case 'power': {
-          const powerA = parseInt(a.rawData?.card_power || '0');
-          const powerB = parseInt(b.rawData?.card_power || '0');
-          return powerB - powerA;
-        }
-        default: // 'id'
-          return a.cardSetId.localeCompare(b.cardSetId);
-      }
-    });
+	// Page dimensions
+	let cardWidthMM = $derived(config.cardDimensions.width);
+	let cardHeightMM = $derived(config.cardDimensions.height);
+	let pageWidthMM = $derived(config.pageDimensions.width);
+	let pageHeightMM = $derived(config.pageDimensions.height);
 
-    return sorted;
-  });
+	// Calculate cards per page
+	const cardsPerRow = $derived(Math.floor(pageWidthMM / cardWidthMM));
+	const rowsPerPage = $derived(Math.floor(pageHeightMM / cardHeightMM));
+	const cardsPerPage = $derived(cardsPerRow * rowsPerPage);
 
-  // Calculate cards per page
-  const cardsPerRow = Math.floor(pageWidthMM / cardWidthMM);
-  const rowsPerPage = Math.floor(pageHeightMM / cardHeightMM);
-  const cardsPerPage = cardsPerRow * rowsPerPage;
+	// Fetch cards from API
+	async function fetchCards() {
+		loading = true;
+		error = '';
+		try {
+			const response = await fetch(`https://optcgapi.com/api/sets/${setId}/`);
+			if (!response.ok) throw new Error(`Failed to fetch: ${response.statusText}`);
 
-  // Fetch cards from API
-  async function fetchCards() {
-    loading = true;
-    error = '';
-    try {
-      const response = await fetch(`https://optcgapi.com/api/sets/${setId}/`);
-      if (!response.ok) throw new Error(`Failed to fetch: ${response.statusText}`);
+			const data: APICard[] = await response.json();
 
-      const data: APICard[] = await response.json();
+			// Filter out duplicates (parallel cards) - keep only the first occurrence
+			const uniqueCards = new Map<string, APICard>();
+			data.forEach((card) => {
+				if (!uniqueCards.has(card.card_set_id)) {
+					uniqueCards.set(card.card_set_id, card);
+				}
+			});
 
-      // Filter out duplicates (parallel cards) - keep only the first occurrence
-      const uniqueCards = new Map<string, APICard>();
-      data.forEach(card => {
-        if (!uniqueCards.has(card.card_set_id)) {
-          uniqueCards.set(card.card_set_id, card);
-        }
-      });
+			// Sort by card_set_id
+			const sortedCards = Array.from(uniqueCards.values()).sort((a, b) =>
+				a.card_set_id.localeCompare(b.card_set_id)
+			);
 
-      // Sort by card_set_id
-      const sortedCards = Array.from(uniqueCards.values()).sort((a, b) =>
-        a.card_set_id.localeCompare(b.card_set_id)
-      );
+			allCards = sortedCards.map((card) => {
+				// Clean the card name - remove ID prefix if it exists
+				let cleanName = card.card_name;
+				const cardId = card.card_set_id.split('-')[1] || '';
+				// Remove patterns like "OP01-001 " or "OP-01 " from the beginning
+				cleanName = cleanName.replace(/^[A-Z]+[0-9]+-[0-9]+\s+/, '');
+				cleanName = cleanName.replace(/^[A-Z]+-[0-9]+\s+/, '');
 
-      allCards = sortedCards.map(card => ({
-        width: cardWidthMM,
-        height: cardHeightMM,
-        setId: card.set_id,
-        cardSetId: card.card_set_id,
-        id: card.card_set_id.split('-')[1] || '',
-        name: card.card_name,
-        cost: card.card_cost === 'NULL' || !card.card_cost ? '' : card.card_cost,
-        image: card.card_image, // Original URL, will be proxied through backend
-        rawData: card
-      }));
+				return {
+					width: cardWidthMM,
+					height: cardHeightMM,
+					setId: card.set_id,
+					cardSetId: card.card_set_id,
+					id: cardId,
+					name: cleanName,
+					cost: card.card_cost === 'NULL' || !card.card_cost ? '' : card.card_cost,
+					image: card.card_image,
+					rawData: card
+				};
+			});
 
-    } catch (e) {
-      error = e instanceof Error ? e.message : 'Unknown error';
-      console.error('Error fetching cards:', e);
-    } finally {
-      loading = false;
-    }
-  }
+			currentCardIndex = 0;
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Unknown error';
+			console.error('Error fetching cards:', e);
+		} finally {
+			loading = false;
+		}
+	}
 
-  // Chunk cards into pages
-  function chunkCards(array: CardDetails[], size: number) {
-    const chunks = [];
-    for (let i = 0; i < array.length; i += size) {
-      chunks.push(array.slice(i, i + size));
-    }
-    return chunks;
-  }
+	// Navigate between cards
+	function nextCard() {
+		if (currentCardIndex < allCards.length - 1) {
+			currentCardIndex++;
+		}
+	}
 
-  // Generate back pages with proper alignment
-  // CRITICAL: Each separator shows Card N on front, Card N-1 on back
-  // So when you place it in your collection, it sits between N-1 and N
-  function generateBackPages(frontPages: CardDetails[][]): CardDetails[][] {
-    if (!doubleSided) return [];
+	function previousCard() {
+		if (currentCardIndex > 0) {
+			currentCardIndex--;
+		}
+	}
 
-    return frontPages.map((page, pageIndex) => {
-      // Get the previous card for each position
-      const backPageCards: CardDetails[] = [];
+	// Print functionality - single run with proper duplex ordering
+	function handlePrint() {
+		// Generate all pages in correct order for duplex printing
+		window.print();
+	}
 
-      for (let i = 0; i < page.length; i++) {
-        const currentCard = page[i];
-        const globalIndex = pageIndex * cardsPerPage + i;
+	// Generate pages for printing with proper duplex ordering
+	// Uses the correct N+1 separator logic for N cards
+	const printPages = $derived.by(() => {
+		if (!allCards.length) return [];
 
-        // Get the previous card (N-1)
-        let previousCard: CardDetails;
-        if (globalIndex === 0) {
-          // First card has no previous, use itself or create a "START" separator
-          previousCard = {
-            ...currentCard,
-            name: 'Collection Start',
-            cardSetId: '---',
-            id: '---',
-            cost: '',
-            image: ''
-          };
-        } else {
-          previousCard = cards[globalIndex - 1];
-        }
+		// Generate N+1 separators for N cards
+		// Physical layout: |1 1|2 2|3 3|4 4|5
+		// Separator 1: Front=Card1, Back=blank
+		// Separator 2: Front=Card2, Back=Card1
+		// ...
+		// Separator N+1: Front=blank, Back=CardN
+		const separators = generateSeparatorPairs(allCards);
 
-        backPageCards.push(previousCard);
-      }
+		// Generate print pages with correct double-sided layout
+		return generatePrintPages(separators, cardsPerPage, flipEdge, cardsPerRow, doubleSided);
+	});
 
-      // Now apply flip transformation
-      if (flipEdge === 'long') {
-        // Long edge flip: horizontal mirror each row
-        const rows = [];
-        for (let row = 0; row < rowsPerPage; row++) {
-          const rowCards = backPageCards.slice(row * cardsPerRow, (row + 1) * cardsPerRow);
-          rows.push([...rowCards].reverse());
-        }
-        return rows.flat();
-      } else {
-        // Short edge flip: 180° rotation
-        return [...backPageCards].reverse();
-      }
-    });
-  }
+	// Save config when values change
+	$effect(() => {
+		config.showCutLines = showCutLines;
+		config.doubleSided = doubleSided;
+		config.flipEdge = flipEdge;
+		config.setId = setId;
+		config.imageQuality = imageQuality;
+		saveConfig(config);
+	});
 
-  let frontPages = $derived(chunkCards(cards, cardsPerPage));
-  let backPages = $derived(generateBackPages(frontPages));
+	// Keyboard shortcuts
+	onMount(() => {
+		function handleKeyboard(e: KeyboardEvent) {
+			// Ctrl+P already handled by browser
+			if (e.key === 'ArrowLeft') {
+				e.preventDefault();
+				previousCard();
+			} else if (e.key === 'ArrowRight') {
+				e.preventDefault();
+				nextCard();
+			}
+		}
 
-  // Multi-set loading
-  async function loadMultipleSets(setIds: string[]) {
-    loading = true;
-    error = '';
-    loadingProgress = 0;
-    const allCardsData: CardDetails[] = [];
-
-    try {
-      for (let i = 0; i < setIds.length; i++) {
-        const id = setIds[i];
-        loadingProgress = Math.round(((i + 1) / setIds.length) * 100);
-
-        const response = await fetch(`https://optcgapi.com/api/sets/${id}/`);
-        if (!response.ok) continue;
-
-        const data: APICard[] = await response.json();
-        const uniqueCards = new Map<string, APICard>();
-        data.forEach(card => {
-          if (!uniqueCards.has(card.card_set_id)) {
-            uniqueCards.set(card.card_set_id, card);
-          }
-        });
-
-        const setCards = Array.from(uniqueCards.values()).map(card => ({
-          width: cardWidthMM,
-          height: cardHeightMM,
-          setId: card.set_id,
-          cardSetId: card.card_set_id,
-          id: card.card_set_id.split('-')[1] || '',
-          name: card.card_name,
-          cost: card.card_cost === 'NULL' || !card.card_cost ? '' : card.card_cost,
-          image: card.card_image,
-          rawData: card
-        }));
-
-        allCardsData.push(...setCards);
-      }
-
-      allCards = allCardsData.sort((a, b) => a.cardSetId.localeCompare(b.cardSetId));
-    } catch (e) {
-      error = e instanceof Error ? e.message : 'Unknown error';
-    } finally {
-      loading = false;
-      loadingProgress = 0;
-    }
-  }
-
-  // Save config whenever it changes
-  $effect(() => {
-    saveConfig({
-      ...config,
-      doubleSided,
-      flipEdge,
-      showImages,
-      imageQuality,
-      showCutLines,
-      setId
-    });
-  });
-
-  // Keyboard shortcuts
-  function handleKeyboard(e: KeyboardEvent) {
-    // Ctrl/Cmd + P - Print
-    if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
-      e.preventDefault();
-      window.print();
-    }
-    // Ctrl/Cmd + K - Open config
-    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-      e.preventDefault();
-      showConfigPanel = !showConfigPanel;
-    }
-    // Shift + P - Open presets
-    if (e.shiftKey && e.key === 'P') {
-      e.preventDefault();
-      showPresetsPanel = !showPresetsPanel;
-    }
-    // Escape - Close modals
-    if (e.key === 'Escape') {
-      showConfigPanel = false;
-      showPresetsPanel = false;
-    }
-  }
-
-  onMount(() => {
-    fetchCards();
-    window.addEventListener('keydown', handleKeyboard);
-    return () => window.removeEventListener('keydown', handleKeyboard);
-  });
+		window.addEventListener('keydown', handleKeyboard);
+		return () => window.removeEventListener('keydown', handleKeyboard);
+	});
 </script>
 
-{#if showConfigPanel}
-  <ConfigPanel bind:config onClose={() => {
-    showConfigPanel = false;
-    // Apply config changes
-    doubleSided = config.doubleSided;
-    flipEdge = config.flipEdge;
-    showImages = config.showImages;
-    imageQuality = config.imageQuality;
-    showCutLines = config.showCutLines;
-  }} />
-{/if}
+<svelte:head>
+	<title>Card Separator Generator</title>
+	<style>
+		.print-preview-container {
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			padding: 2rem;
+			background: #f3f4f6;
+		}
 
-{#if showPresetsPanel}
-  <Presets
-    onApply={(newConfig) => {
-      config = newConfig;
-      doubleSided = config.doubleSided;
-      flipEdge = config.flipEdge;
-      showImages = config.showImages;
-      imageQuality = config.imageQuality;
-      showCutLines = config.showCutLines;
-    }}
-    onClose={() => showPresetsPanel = false}
-  />
-{/if}
+		@media print {
+			@page {
+				margin: 0;
+				size: {pageWidthMM}mm {pageHeightMM}mm;
+			}
+			body {
+				margin: 0;
+				padding: 0;
+			}
+		}
+	</style>
+</svelte:head>
 
-<main class="min-h-screen">
-  <!-- Configuration Panel (hidden when printing) -->
-  <div class="print:hidden bg-gray-800 text-white p-6 sticky top-0 z-50 shadow-lg">
-    <div class="flex items-center justify-between mb-4">
-      <h1 class="text-2xl font-bold">Card Separator Generator</h1>
-      <div class="flex gap-2">
-        <button
-          onclick={() => showPresetsPanel = true}
-          class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded font-medium transition-colors"
-          title="Save/Load Presets (Shift+P)"
-        >
-          <svg class="w-5 h-5 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
-          </svg>
-          Presets
-        </button>
-        <button
-          onclick={() => showConfigPanel = true}
-          class="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded font-medium transition-colors"
-          title="Configuration (Ctrl+K)"
-        >
-          <svg class="w-5 h-5 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
-          Config
-        </button>
-        <button
-          onclick={() => window.print()}
-          disabled={cards.length === 0}
-          class="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 rounded font-medium transition-colors"
-          title="Print (Ctrl+P)"
-        >
-          Print
-        </button>
-      </div>
-    </div>
+<main class="flex h-screen overflow-hidden bg-gray-50">
+	<!-- Sidebar -->
+	<div class="print:hidden">
+		<Sidebar
+			bind:config
+			bind:tabConfig
+			bind:visualConfig
+			bind:setId
+			bind:showCutLines
+			bind:doubleSided
+			bind:flipEdge
+			bind:imageQuality
+			{loading}
+			{error}
+			{allCards}
+			onLoadCards={fetchCards}
+			onPrint={handlePrint}
+		/>
+	</div>
 
-    <!-- Filter/Sort Bar -->
-    <div class="grid grid-cols-2 md:grid-cols-6 gap-3 mb-4">
-      <div>
-        <label class="block text-xs font-medium text-gray-300 mb-1">Set ID(s)</label>
-        <input
-          type="text"
-          bind:value={setId}
-          class="w-full px-3 py-2 bg-gray-700 rounded border border-gray-600 focus:border-blue-500 focus:outline-none text-sm"
-          placeholder="OP-01 or OP-01,OP-02"
-          title="Comma-separated for multiple sets"
-        />
-      </div>
-      <div>
-        <label class="block text-xs font-medium text-gray-300 mb-1">Filter Color</label>
-        <input
-          type="text"
-          bind:value={filterColor}
-          class="w-full px-3 py-2 bg-gray-700 rounded border border-gray-600 focus:border-blue-500 focus:outline-none text-sm"
-          placeholder="Red, Blue..."
-        />
-      </div>
-      <div>
-        <label class="block text-xs font-medium text-gray-300 mb-1">Filter Type</label>
-        <input
-          type="text"
-          bind:value={filterType}
-          class="w-full px-3 py-2 bg-gray-700 rounded border border-gray-600 focus:border-blue-500 focus:outline-none text-sm"
-          placeholder="Leader, Character..."
-        />
-      </div>
-      <div>
-        <label class="block text-xs font-medium text-gray-300 mb-1">Sort By</label>
-        <select bind:value={sortBy} class="w-full px-3 py-2 bg-gray-700 rounded text-sm border border-gray-600">
-          <option value="id">Card ID</option>
-          <option value="name">Name</option>
-          <option value="cost">Cost</option>
-          <option value="power">Power</option>
-        </select>
-      </div>
-      <div class="col-span-2 flex items-end gap-2">
-        <button
-          onclick={() => {
-            const sets = setId.split(',').map(s => s.trim()).filter(Boolean);
-            if (sets.length > 1) {
-              loadMultipleSets(sets);
-            } else {
-              fetchCards();
-            }
-          }}
-          disabled={loading}
-          class="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 rounded font-medium transition-colors text-sm"
-        >
-          {loading ? `Loading ${loadingProgress}%...` : 'Load Cards'}
-        </button>
-        {#if allCards.length > 0}
-          <button
-            onclick={() => { filterColor = ''; filterType = ''; sortBy = 'id'; }}
-            class="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm"
-            title="Clear filters"
-          >
-            ✕
-          </button>
-        {/if}
-      </div>
-    </div>
+	<!-- Main Content Area -->
+	<div class="flex-1 flex flex-col overflow-hidden print:hidden" style="transition: margin-left 0.3s ease;">
+		<!-- Header -->
+		<header class="bg-white border-b border-gray-200 px-6 py-4">
+			<div class="flex items-center justify-between">
+				<div>
+					<h1 class="text-2xl font-bold text-gray-900">Card Separator Generator</h1>
+					{#if allCards.length > 0}
+						<p class="text-sm text-gray-600 mt-1">
+							{#if previewMode === 'single'}
+								Viewing card {currentCardIndex + 1} of {allCards.length}
+							{:else}
+								Print Preview - {printPages.length} pages
+							{/if}
+						</p>
+					{/if}
+				</div>
 
-    <!-- Quick Controls -->
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+				{#if allCards.length > 0}
+					<div class="flex items-center gap-4">
+						<!-- Preview Mode Toggle -->
+						<div class="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
+							<button
+								onclick={() => (previewMode = 'single')}
+								class="px-3 py-1.5 rounded text-sm font-medium transition-colors"
+								class:bg-white={previewMode === 'single'}
+								class:shadow={previewMode === 'single'}
+								class:text-gray-900={previewMode === 'single'}
+								class:text-gray-600={previewMode !== 'single'}
+							>
+								Single Card
+							</button>
+							<button
+								onclick={() => (previewMode = 'print')}
+								class="px-3 py-1.5 rounded text-sm font-medium transition-colors"
+								class:bg-white={previewMode === 'print'}
+								class:shadow={previewMode === 'print'}
+								class:text-gray-900={previewMode === 'print'}
+								class:text-gray-600={previewMode !== 'print'}
+							>
+								Print Preview
+							</button>
+						</div>
+						<!-- Navigation -->
+						<div class="flex items-center gap-2">
+							<button
+								onclick={previousCard}
+								disabled={currentCardIndex === 0}
+								class="px-3 py-2 bg-gray-200 hover:bg-gray-300 disabled:bg-gray-100 disabled:text-gray-400 rounded font-medium transition-colors"
+								title="Previous card (←)"
+							>
+								<svg
+									xmlns="http://www.w3.org/2000/svg"
+									fill="none"
+									viewBox="0 0 24 24"
+									stroke-width="2"
+									stroke="currentColor"
+									class="w-5 h-5"
+								>
+									<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+								</svg>
+							</button>
+							<span class="text-sm font-medium text-gray-700">
+								{currentCardIndex + 1} / {allCards.length}
+							</span>
+							<button
+								onclick={nextCard}
+								disabled={currentCardIndex === allCards.length - 1}
+								class="px-3 py-2 bg-gray-200 hover:bg-gray-300 disabled:bg-gray-100 disabled:text-gray-400 rounded font-medium transition-colors"
+								title="Next card (→)"
+							>
+								<svg
+									xmlns="http://www.w3.org/2000/svg"
+									fill="none"
+									viewBox="0 0 24 24"
+									stroke-width="2"
+									stroke="currentColor"
+									class="w-5 h-5"
+								>
+									<path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+								</svg>
+							</button>
+						</div>
+					</div>
+				{/if}
+			</div>
+		</header>
 
-      <div>
-        <label class="flex items-center gap-2">
-          <input type="checkbox" bind:checked={doubleSided} class="w-4 h-4" />
-          <span class="text-sm font-medium">Double-Sided</span>
-        </label>
-        {#if doubleSided}
-          <div class="mt-2">
-            <label class="block text-xs text-gray-300 mb-1">Flip Edge</label>
-            <select bind:value={flipEdge} class="w-full px-2 py-1 bg-gray-700 rounded text-sm border border-gray-600">
-              <option value="long">Long (Book)</option>
-              <option value="short">Short (Calendar)</option>
-            </select>
-          </div>
-        {/if}
-      </div>
+		<!-- Card Preview Area -->
+		<div class="flex-1 overflow-auto">
+			{#if previewMode === 'single'}
+				<CardEditor
+					card={currentCard}
+					{tabConfig}
+					{visualConfig}
+					cardDimensions={config.cardDimensions}
+					{showCutLines}
+					primaryColor={config.colors.primary}
+					secondaryColor={config.colors.secondary}
+				/>
+			{:else}
+				<!-- Print Preview -->
+				<div class="print-preview-container p-8">
+					{#each printPages as page, pageIdx}
+						<div
+							class="print-preview-page"
+							style:width="{pageWidthMM}mm"
+							style:height="{pageHeightMM}mm"
+							style:margin-bottom="2rem"
+							style:box-shadow="0 4px 6px -1px rgb(0 0 0 / 0.1)"
+							style:background="white"
+						>
+							<div
+								class="grid"
+								style:grid-template-columns="repeat({cardsPerRow}, {cardWidthMM}mm)"
+								style:grid-template-rows="repeat({rowsPerPage}, {cardHeightMM}mm)"
+								style:width="100%"
+								style:height="100%"
+							>
+								{#each page.cards as card}
+									<div
+										style:width="{cardWidthMM}mm"
+										style:height="{cardHeightMM}mm"
+										style:position="relative"
+										style:border="{showCutLines ? '1px dashed #999' : visualConfig.borderWidth + 'px solid ' + visualConfig.borderColor}"
+									>
+										<!-- Tab section -->
+										<div
+											style:position="absolute"
+											style:top="0"
+											style:left="0"
+											style:right="0"
+											style:height="{config.cardDimensions.tabHeight}mm"
+											style:background={config.colors.secondary}
+											style:display="flex"
+											style:align-items="center"
+											style:justify-content="center"
+											style:transform="translate({tabConfig.offsetX}px, {tabConfig.offsetY}px)"
+											style:overflow="hidden"
+											style:padding="0 4px"
+										>
+											<span
+												style:color={tabConfig.textColor}
+												style:font-family={tabConfig.fontFamily}
+												style:font-weight="bold"
+												style:-webkit-text-stroke="{tabConfig.strokeWidth}px {tabConfig.strokeColor}"
+												style:paint-order="stroke fill"
+												style:white-space="nowrap"
+												style:font-size="clamp(6px, {tabConfig.fontSize}px, {tabConfig.fontSize}px)"
+											>
+												{card.name}
+											</span>
+										</div>
 
-      <div class="space-y-2">
-        <label class="flex items-center gap-2">
-          <input type="checkbox" bind:checked={showImages} class="w-4 h-4" />
-          <span class="text-sm font-medium">Show Images</span>
-        </label>
-        {#if showImages}
-          <div>
-            <label class="block text-xs text-gray-300 mb-1">Image Quality</label>
-            <select bind:value={imageQuality} class="w-full px-2 py-1 bg-gray-700 rounded text-sm border border-gray-600">
-              <option value="thumbnail">Low (Fast)</option>
-              <option value="medium">Medium (Balanced)</option>
-              <option value="full">High (Slow)</option>
-              <option value="original">Original (Very Slow)</option>
-            </select>
-          </div>
-        {/if}
-        <label class="flex items-center gap-2">
-          <input type="checkbox" bind:checked={showCutLines} class="w-4 h-4" />
-          <span class="text-sm font-medium">Cut Lines</span>
-        </label>
-      </div>
+										<!-- Image -->
+										{#if card.image}
+											<div
+												style:position="absolute"
+												style:top="{config.cardDimensions.tabHeight}mm"
+												style:left="0"
+												style:right="0"
+												style:bottom="0"
+												style:display="flex"
+												style:align-items="center"
+												style:justify-content="center"
+												style:background="#f3f4f6"
+												style:overflow="hidden"
+											>
+												{#if card.image}
+													<img
+														src={getImageUrl(card.image, imageQuality)}
+														alt={card.name}
+														style:width="{visualConfig.imageCenterSize}%"
+														style:height="{visualConfig.imageCenterSize}%"
+														style:object-fit="contain"
+														style:filter={visualConfig.imageFilter !== 'none'
+															? visualConfig.imageFilter
+															: undefined}
+														loading="eager"
+														onerror={(e) => {
+															console.error('Image failed to load:', card.name, getImageUrl(card.image, imageQuality));
+															e.currentTarget.style.display = 'none';
+														}}
+													/>
+												{/if}
+											</div>
+										{/if}
+									</div>
+								{/each}
+							</div>
+						</div>
+					{/each}
+				</div>
+			{/if}
+		</div>
+	</div>
 
-    </div>
+	<!-- Print View (hidden on screen) -->
+	<div class="hidden print:block">
+		{#each printPages as page, pageIdx}
+			<div
+				class="page"
+				style:width="{pageWidthMM}mm"
+				style:height="{pageHeightMM}mm"
+				style:page-break-after={pageIdx < printPages.length - 1 ? 'always' : 'auto'}
+			>
+				<div
+					class="grid"
+					style:grid-template-columns="repeat({cardsPerRow}, {cardWidthMM}mm)"
+					style:grid-template-rows="repeat({rowsPerPage}, {cardHeightMM}mm)"
+				>
+					{#each page.cards as card}
+						<div
+							style:width="{cardWidthMM}mm"
+							style:height="{cardHeightMM}mm"
+							style:position="relative"
+						>
+							<!-- Card content here - simplified for printing -->
+							<div
+								style:width="100%"
+								style:height="100%"
+								style:border="{showCutLines ? '1px dashed #999' : visualConfig.borderWidth + 'px solid ' + visualConfig.borderColor}"
+								style:background="white"
+								style:position="relative"
+							>
+								<!-- Tab section -->
+								<div
+									style:position="absolute"
+									style:top="0"
+									style:left="0"
+									style:right="0"
+									style:height="{config.cardDimensions.tabHeight}mm"
+									style:background={config.colors.secondary}
+									style:display="flex"
+									style:align-items="center"
+									style:justify-content="center"
+									style:z-index="2"
+									style:transform="translate({tabConfig.offsetX}px, {tabConfig.offsetY}px)"
+									style:padding="0 4px"
+									style:overflow="hidden"
+								>
+									<span
+										style:color={tabConfig.textColor}
+										style:font-family={tabConfig.fontFamily}
+										style:font-weight="bold"
+										style:-webkit-text-stroke="{tabConfig.strokeWidth}px {tabConfig.strokeColor}"
+										style:paint-order="stroke fill"
+										style:white-space="nowrap"
+										style:font-size="clamp(6px, {tabConfig.fontSize}px, {tabConfig.fontSize}px)"
+									>
+										{card.name}
+									</span>
+								</div>
 
-    {#if error}
-      <div class="bg-red-900/50 border border-red-500 rounded p-3 text-sm">
-        Error: {error}
-      </div>
-    {/if}
-
-    {#if allCards.length > 0}
-      <div class="text-sm text-gray-300 space-y-1">
-        <div class="flex items-center justify-between">
-          <div>
-            {cards.length} cards {allCards.length !== cards.length ? `(${allCards.length} total, ${allCards.length - cards.length} filtered)` : ''} |
-            {frontPages.length} pages {doubleSided ? `(${frontPages.length * 2} total with backs)` : ''}
-            | {cardsPerRow} cards per row, {rowsPerPage} rows per page
-          </div>
-          <div class="text-xs text-gray-400">
-            Shortcuts: Ctrl+P (Print) · Ctrl+K (Config) · Shift+P (Presets) · Esc (Close)
-          </div>
-        </div>
-        {#if doubleSided}
-          <div class="text-yellow-300">
-            Print Instructions: Print all {frontPages.length} front pages first, then reload paper and print {backPages.length} back pages.
-            {flipEdge === 'long' ? 'Set your printer to flip on LONG edge (like a book).' : 'Set your printer to flip on SHORT edge (like a calendar).'}
-          </div>
-        {/if}
-      </div>
-    {/if}
-
-    <!-- Instructions Accordion -->
-    <details class="mt-4 bg-gray-700 rounded p-3">
-      <summary class="cursor-pointer font-medium">How to Use</summary>
-      <div class="mt-3 text-sm text-gray-300 space-y-2">
-        <p><strong>1. Load Cards:</strong> Enter a set ID (e.g., OP-01, OP-02) and click "Load Cards"</p>
-        <p><strong>2. Configure:</strong> Choose single or double-sided printing. If double-sided, test with a sample sheet to determine your printer's flip edge</p>
-        <p><strong>3. Print:</strong> Click the "Print" button. For double-sided, print front pages first, then reload the paper and print back pages</p>
-        <p><strong>4. Cut:</strong> Cut along the card boundaries to create individual separators</p>
-        <p><strong>5. Organize:</strong> Place separators in your collection between sequential cards</p>
-      </div>
-    </details>
-  </div>
-
-  <!-- Print Area -->
-  <div class="p-0 bg-gray-100 print:bg-white print:p-0">
-    {#if loading}
-      <div class="flex items-center justify-center h-96">
-        <div class="text-2xl text-gray-600">Loading cards...</div>
-      </div>
-    {:else if cards.length === 0}
-      <div class="flex items-center justify-center h-96">
-        <div class="text-xl text-gray-600">Enter a Set ID and click "Load Cards"</div>
-      </div>
-    {:else}
-      <!-- Front Pages -->
-      {#each frontPages as page, pageIdx}
-        <div
-          class="grid gap-0 justify-start break-after-page print:gap-0 print:justify-start page-break"
-          style={`grid-template-columns: repeat(${cardsPerRow}, ${cardWidthMM}mm);`}
-        >
-          {#each page as card}
-            <Card
-              {card}
-              {titleHeightMM}
-              {titleWidthMM}
-              showImage={showImages}
-              imageUrl={card.image ? getImageUrl(card.image, imageQuality) : ''}
-              {showCutLines}
-            />
-          {/each}
-        </div>
-      {/each}
-
-      <!-- Back Pages -->
-      {#if doubleSided}
-        {#each backPages as page, pageIdx}
-          <div
-            class="grid gap-0 justify-start break-after-page print:gap-0 print:justify-start page-break"
-            style={`grid-template-columns: repeat(${cardsPerRow}, ${cardWidthMM}mm);`}
-          >
-            {#each page as card}
-              <Card
-                {card}
-                {titleHeightMM}
-                {titleWidthMM}
-                showImage={showImages}
-                imageUrl={card.image ? getImageUrl(card.image, imageQuality) : ''}
-                {showCutLines}
-              />
-            {/each}
-          </div>
-        {/each}
-      {/if}
-    {/if}
-  </div>
+								<!-- Image -->
+								{#if card.image}
+									<div
+										style:position="absolute"
+										style:top="{config.cardDimensions.tabHeight}mm"
+										style:left="0"
+										style:right="0"
+										style:bottom="0"
+										style:display="flex"
+										style:align-items="center"
+										style:justify-content="center"
+										style:background="#f3f4f6"
+									>
+										<img
+											src={getImageUrl(card.image, imageQuality)}
+											alt={card.name}
+											style:width="{visualConfig.imageCenterSize}%"
+											style:height="{visualConfig.imageCenterSize}%"
+											style:object-fit="contain"
+											style:filter={visualConfig.imageFilter !== 'none'
+												? visualConfig.imageFilter
+												: undefined}
+											loading="eager"
+											crossorigin="anonymous"
+										/>
+									</div>
+								{/if}
+							</div>
+						</div>
+					{/each}
+				</div>
+			</div>
+		{/each}
+	</div>
 </main>
-
-<style>
-  .page-break {
-    page-break-after: always;
-    break-after: page;
-  }
-
-  @media print {
-    .page-break:last-child {
-      page-break-after: auto;
-      break-after: auto;
-    }
-
-    @page {
-      size: A4;
-      margin: 0;
-    }
-
-    body {
-      margin: 0;
-      padding: 0;
-    }
-  }
-</style>
